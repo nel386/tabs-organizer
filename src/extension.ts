@@ -1,149 +1,187 @@
 import * as vscode from 'vscode';
+import { GitService } from './services/GitService';
+import { StorageService } from './services/StorageService';
+import { TabsService } from './services/TabsService';
+import { ConfigService } from './services/ConfigService';
+import { Logger, LogLevel } from './services/Logger';
+import { StatusBarManager } from './ui/StatusBarManager';
+import { CommandHandler } from './ui/CommandHandler';
 
-let currentBranch: string | undefined;
+let gitService: GitService;
+let storageService: StorageService;
+let tabsService: TabsService;
+let configService: ConfigService;
+let statusBarManager: StatusBarManager;
+let commandHandler: CommandHandler;
+let autoSaveTimeout: NodeJS.Timeout | undefined;
 
-export function activate(context: vscode.ExtensionContext) {
-  console.log('Branch Tabs extension activated');
+export async function activate(context: vscode.ExtensionContext) {
+  // Inicializar logger
+  Logger.initialize(LogLevel.INFO);
+  Logger.info('Branch Tabs extension activated');
 
-  // Comandos manuales (por si acaso)
-  const saveTabs = vscode.commands.registerCommand('branchTabs.saveTabs', async () => {
-    await saveCurrentTabs(context);
-  });
+  try {
+    // Inicializar servicios
+    gitService = new GitService();
+    storageService = new StorageService(context);
+    tabsService = new TabsService();
+    configService = new ConfigService();
+    
+    // Inicializar Git
+    const gitInitialized = await gitService.initialize();
+    if (!gitInitialized) {
+      Logger.warn('Git extension not available');
+      return;
+    }
 
-  const restoreTabs = vscode.commands.registerCommand('branchTabs.restoreTabs', async () => {
-    await restoreTabsForBranch(context);
-  });
+    // Inicializar UI
+    statusBarManager = new StatusBarManager(gitService, storageService);
+    commandHandler = new CommandHandler(gitService, storageService, tabsService, configService);
 
-  context.subscriptions.push(saveTabs, restoreTabs);
+    // Actualizar status bar inicial
+    await statusBarManager.update();
 
-  // Inicializar detección automática de cambio de rama
-  initializeGitBranchWatcher(context);
+    // Registrar comandos
+    registerCommands(context);
+
+    // Configurar watcher de cambios de rama
+    setupBranchWatcher(context);
+
+    // Auto-save con debounce
+    if (configService.autoSave) {
+      context.subscriptions.push(
+        vscode.window.tabGroups.onDidChangeTabs(async () => {
+          scheduleAutoSave();
+          await statusBarManager.update();
+        })
+      );
+    }
+
+    // Escuchar cambios de configuración
+    context.subscriptions.push(
+      vscode.workspace.onDidChangeConfiguration((e) => {
+        if (e.affectsConfiguration('branchTabs')) {
+          configService.refresh();
+          Logger.info('Configuration updated');
+        }
+      })
+    );
+
+    // Agregar status bar a disposables
+    context.subscriptions.push(statusBarManager);
+
+    Logger.info('Extension activation completed successfully');
+  } catch (error) {
+    Logger.error('Failed to activate extension', error);
+    vscode.window.showErrorMessage('Branch Tabs: Failed to activate extension');
+  }
 }
 
-export function deactivate() {}
-
-async function initializeGitBranchWatcher(context: vscode.ExtensionContext): Promise<void> {
-  const gitExtension = vscode.extensions.getExtension('vscode.git')?.exports;
-  const api = gitExtension?.getAPI(1);
-
-  if (!api) {
-    console.log('Git extension not available');
-    return;
+export function deactivate() {
+  if (autoSaveTimeout) {
+    clearTimeout(autoSaveTimeout);
   }
-
-  // Esperar a que haya repositorios disponibles
-  if (api.repositories.length === 0) {
-    const disposable = api.onDidOpenRepository(async () => {
-      await setupRepositoryWatcher(context, api);
-      disposable.dispose();
-    });
-    context.subscriptions.push(disposable);
-  } else {
-    await setupRepositoryWatcher(context, api);
-  }
+  Logger.info('Extension deactivated');
+  Logger.dispose();
 }
 
-async function setupRepositoryWatcher(context: vscode.ExtensionContext, api: any): Promise<void> {
-  if (api.repositories.length === 0) return;
+function registerCommands(context: vscode.ExtensionContext): void {
+  context.subscriptions.push(
+    vscode.commands.registerCommand('branchTabs.saveTabs', async () => {
+      await commandHandler.saveTabs();
+      await statusBarManager.update();
+    }),
 
-  const repo = api.repositories[0];
-  
-  // Guardar rama inicial
-  currentBranch = repo.state.HEAD?.name;
-  console.log(`Initial branch: ${currentBranch}`);
+    vscode.commands.registerCommand('branchTabs.restoreTabs', async () => {
+      await commandHandler.restoreTabs();
+      await statusBarManager.update();
+    }),
 
-  // Escuchar cambios en el estado del repositorio
-  const disposable = repo.state.onDidChange(async () => {
-    const newBranch = repo.state.HEAD?.name;
+    vscode.commands.registerCommand('branchTabs.showQuickMenu', async () => {
+      await commandHandler.showQuickMenu();
+      await statusBarManager.update();
+    }),
 
-    // Detectar cambio de rama
-    if (newBranch && currentBranch && newBranch !== currentBranch) {
-      console.log(`Branch changed from ${currentBranch} to ${newBranch}`);
+    vscode.commands.registerCommand('branchTabs.loadFromBranch', async () => {
+      await commandHandler.loadTabsFromBranch();
+      await statusBarManager.update();
+    })
+  );
+}
 
+function setupBranchWatcher(context: vscode.ExtensionContext): void {
+  const disposable = gitService.onBranchChange(async (newBranch, oldBranch) => {
+    Logger.info(`Branch changed from ${oldBranch} to ${newBranch}`);
+    
+    try {
       // Guardar tabs de la rama anterior
-      await saveTabsForBranch(context, currentBranch);
-
-      // Restaurar tabs de la nueva rama
-      await restoreTabsForBranch(context, newBranch);
-
-      // Actualizar rama actual
-      currentBranch = newBranch;
-    } else if (newBranch && !currentBranch) {
-      // Primera vez que detectamos una rama
-      currentBranch = newBranch;
+      await saveTabs(oldBranch);
+      
+      // Restaurar tabs de la nueva rama si está habilitado
+      if (configService.autoRestore) {
+        await restoreTabs(newBranch);
+      }
+      
+      // Actualizar status bar
+      await statusBarManager.update();
+    } catch (error) {
+      Logger.error('Error during branch change', error);
+      vscode.window.showErrorMessage('Failed to switch tabs between branches');
     }
   });
 
   context.subscriptions.push(disposable);
 }
 
-async function saveCurrentTabs(context: vscode.ExtensionContext): Promise<void> {
-  const branch = await getCurrentGitBranch();
-  if (!branch) {
-    vscode.window.showWarningMessage('No Git branch detected');
-    return;
+function scheduleAutoSave(): void {
+  if (autoSaveTimeout) {
+    clearTimeout(autoSaveTimeout);
   }
 
-  await saveTabsForBranch(context, branch);
-  vscode.window.showInformationMessage(`Saved tabs for branch: ${branch}`);
-}
-
-async function saveTabsForBranch(context: vscode.ExtensionContext, branch: string): Promise<void> {
-  const openTabs = vscode.window.tabGroups.all
-    .flatMap(group => group.tabs)
-    .filter(tab => tab.input instanceof vscode.TabInputText)
-    .map(tab => (tab.input as vscode.TabInputText).uri.fsPath);
-
-  const storageKey = getStorageKey(branch);
-  await context.workspaceState.update(storageKey, openTabs);
-
-  console.log(`Saved ${openTabs.length} tabs for branch: ${branch}`);
-}
-
-async function restoreTabsForBranch(context: vscode.ExtensionContext, branch?: string): Promise<void> {
-  const targetBranch = branch || await getCurrentGitBranch();
+  const delay = configService.autoSaveDelay;
   
-  if (!targetBranch) {
-    vscode.window.showWarningMessage('No Git branch detected');
-    return;
-  }
-
-  const storageKey = getStorageKey(targetBranch);
-  const savedTabs = context.workspaceState.get<string[]>(storageKey, []);
-
-  console.log(`Restoring ${savedTabs.length} tabs for branch: ${targetBranch}`);
-
-  // Cerrar todas las tabs actuales
-  await vscode.commands.executeCommand('workbench.action.closeAllEditors');
-
-  // Abrir tabs guardadas
-  for (const filePath of savedTabs) {
-    try {
-      const doc = await vscode.workspace.openTextDocument(filePath);
-      await vscode.window.showTextDocument(doc, { preview: false, preserveFocus: true });
-    } catch (err) {
-      console.error(`Could not open file: ${filePath}`, err);
+  autoSaveTimeout = setTimeout(async () => {
+    const branch = gitService.getCurrentBranch();
+    if (branch) {
+      await saveTabs(branch);
     }
-  }
+  }, delay);
+}
 
-  if (savedTabs.length > 0) {
-    vscode.window.showInformationMessage(`Restored ${savedTabs.length} tabs for branch: ${targetBranch}`);
+async function saveTabs(branchName: string): Promise<void> {
+  try {
+    const workspacePath = gitService.getWorkspacePath();
+    const tabs = tabsService.getCurrentOpenTabs();
+    
+    await storageService.saveTabs(workspacePath, branchName, tabs);
+    Logger.debug(`Saved ${tabs.length} tabs for branch: ${branchName}`);
+  } catch (error) {
+    Logger.error(`Failed to save tabs for branch ${branchName}`, error);
+    throw error;
   }
 }
 
-async function getCurrentGitBranch(): Promise<string | undefined> {
-  const gitExtension = vscode.extensions.getExtension('vscode.git')?.exports;
-  const api = gitExtension?.getAPI(1);
+async function restoreTabs(branchName: string): Promise<void> {
+  try {
+    const workspacePath = gitService.getWorkspacePath();
+    const savedTabs = await storageService.getTabs(workspacePath, branchName);
 
-  if (!api || api.repositories.length === 0) {
-    return undefined;
+    Logger.debug(`Restoring ${savedTabs.length} tabs for branch: ${branchName}`);
+
+    if (savedTabs.length === 0) {
+      await tabsService.closeAllTabs();
+      return;
+    }
+
+    await tabsService.openTabs(savedTabs, false);
+    
+    if (configService.showNotifications) {
+      vscode.window.showInformationMessage(
+        `Restored ${savedTabs.length} tabs for branch: ${branchName}`
+      );
+    }
+  } catch (error) {
+    Logger.error(`Failed to restore tabs for branch ${branchName}`, error);
+    throw error;
   }
-
-  const repo = api.repositories[0];
-  return repo.state.HEAD?.name;
-}
-
-function getStorageKey(branch: string): string {
-  const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || 'default';
-  return `branchTabs:${workspaceFolder}#${branch}`;
 }

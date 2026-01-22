@@ -1,71 +1,110 @@
-# tabs-organizer README
+# Branch Tabs - VS Code Extension
 
-This is the README for your extension "tabs-organizer". After writing up a brief description, we recommend including the following sections.
+Save and restore opened tabs automatically per Git branch. Never lose your context when switching between branches.
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+### 🔄 Automatic Tab Management
+- **Auto-save**: Tabs are automatically saved when you switch branches
+- **Auto-restore**: Previously opened tabs are restored when returning to a branch
+- **Smart detection**: Works seamlessly with Git branch changes
 
-For example if there is an image subfolder under your extension project workspace:
+### 📊 Status Bar Integration
+- See current branch and number of saved tabs at a glance
+- Quick access menu with one click
+- Real-time updates
 
-\!\[feature X\]\(images/feature-x.png\)
+### 🎯 Manual Controls
+- Save tabs manually for the current branch
+- Restore tabs on demand
+- Preview saved tabs without opening them
+- Load tabs from another branch without switching
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+### ⚙️ Customizable
+- Enable/disable auto-save and auto-restore
+- Configure auto-save delay
+- Show/hide notifications
+- All configurable via VS Code settings
+
+## Usage
+
+### Status Bar (Recommended)
+Click on the status bar item showing your branch name (e.g., `📂 main (12 tabs)`) to access:
+- 💾 Save Current Tabs
+- 📂 Restore Tabs
+- 👁️ Preview Saved Tabs
+- 🔄 Load Tabs from Another Branch
+- ⚙️ Settings
+
+### Context Menu
+Right-click on any tab → **Load Tabs from Another Branch...**
+
+### Command Palette
+- `Branch Tabs: Save Current Tabs` - Manually save tabs
+- `Branch Tabs: Restore Tabs for Current Branch` - Manually restore tabs
+- `Branch Tabs: Show Menu` - Open quick menu
 
 ## Requirements
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+- VS Code 1.108.1 or higher
+- Git repository (extension activates when Git is available)
 
 ## Extension Settings
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
-For example:
-
 This extension contributes the following settings:
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+* `branchTabs.autoRestore`: Enable/disable automatic tab restoration when switching branches (default: `true`)
+* `branchTabs.autoSave`: Enable/disable automatic tab saving when tabs change (default: `true`)
+* `branchTabs.showNotifications`: Show/hide notification messages (default: `true`)
+* `branchTabs.autoSaveDelay`: Delay in milliseconds before auto-saving tabs (default: `2000`)
 
-## Known Issues
+## How It Works
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+1. **Branch Detection**: Monitors Git branch changes using VS Code's Git extension API
+2. **Storage**: Tabs are saved per branch in VS Code's workspace state (local to each project)
+3. **Auto-save**: When tabs change, they're saved after a configurable delay (debounced)
+4. **Restore**: When switching branches, tabs from the target branch are automatically restored
+
+## Architecture
+
+Built with clean architecture principles:
+
+src/
+├── services/ # Business logic
+│ ├── GitService # Git API integration
+│ ├── StorageService # Persistence layer
+│ ├── TabsService # Tab management
+│ ├── ConfigService # Configuration
+│ └── Logger # Logging utility
+├── ui/ # User interface
+│ ├── StatusBarManager
+│ └── CommandHandler
+└── types/ # TypeScript interfaces
+
+
+## Known Limitations
+
+- Tabs are saved per workspace (not globally)
+- Only text editor tabs are saved (not webviews, terminals, etc.)
+- Tab order may vary slightly on restore
+
+## Contributing
+
+This is a portfolio project. Feedback and suggestions are welcome!
 
 ## Release Notes
 
-Users appreciate release notes as you update your extension.
+### 0.0.1 (Initial Release)
+- Automatic tab save/restore per Git branch
+- Status bar integration
+- Load tabs from other branches
+- Configurable behavior
+- Clean modular architecture
 
-### 1.0.0
+## License
 
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
+MIT
 
 ---
 
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+**Enjoy seamless branch switching!** 🚀

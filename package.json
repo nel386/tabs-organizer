@@ -1,13 +1,39 @@
 {
   "name": "tabs-organizer",
-  "displayName": "tabs-organizer",
-  "description": "Save and restore opened tabs per Git branch",
+  "displayName": "Branch Tabs",
+  "description": "Save and restore opened tabs automatically per Git branch",
   "version": "0.0.1",
+  "publisher": "nel386",
+  "author": {
+    "name": "nel386"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nel386/tabs-organizer"
+  },
+  "bugs": {
+    "url": "https://github.com/nel386/tabs-organizer/issues"
+  },
+  "keywords": [
+    "git",
+    "tabs",
+    "branch",
+    "workspace",
+    "productivity",
+    "context"
+  ],
+  "icon": "icon.png",
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
   "engines": {
     "vscode": "^1.108.1"
   },
   "categories": [
-    "Other"
+    "Other",
+    "SCM Providers"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -22,8 +48,51 @@
       {
         "command": "branchTabs.restoreTabs",
         "title": "Branch Tabs: Restore Tabs for Current Branch"
+      },
+      {
+        "command": "branchTabs.showQuickMenu",
+        "title": "Branch Tabs: Show Menu"
+      },
+      {
+        "command": "branchTabs.loadFromBranch",
+        "title": "Load Tabs from Another Branch..."
       }
-    ]
+    ],
+    "menus": {
+      "editor/title/context": [
+        {
+          "command": "branchTabs.loadFromBranch",
+          "group": "branchTabs@1"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Branch Tabs",
+      "properties": {
+        "branchTabs.autoRestore": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically restore tabs when switching branches"
+        },
+        "branchTabs.autoSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically save tabs when they change"
+        },
+        "branchTabs.showNotifications": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show notifications when saving/restoring tabs"
+        },
+        "branchTabs.autoSaveDelay": {
+          "type": "number",
+          "default": 2000,
+          "description": "Delay in milliseconds before auto-saving tabs (debounce)",
+          "minimum": 500,
+          "maximum": 10000
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
