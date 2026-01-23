@@ -1,4 +1,11 @@
-# Branch Tabs - VS Code Extension
+# Branch Tabs Manager - VS Code Extension
+
+[![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/nel386.tabs-organizer)](https://marketplace.visualstudio.com/items?itemName=nel386.tabs-organizer)
+[![Installs](https://img.shields.io/visual-studio-marketplace/i/nel386.tabs-organizer)](https://marketplace.visualstudio.com/items?itemName=nel386.tabs-organizer)
+[![Rating](https://img.shields.io/visual-studio-marketplace/r/nel386.tabs-organizer)](https://marketplace.visualstudio.com/items?itemName=nel386.tabs-organizer)
+
+[Install from VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=nel386.tabs-organizer)
+
 
 Save and restore opened tabs automatically per Git branch. Never lose your context when switching between branches.
 
