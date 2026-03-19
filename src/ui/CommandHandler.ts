@@ -1,3 +1,4 @@
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { GitService } from '../services/GitService';
 import { StorageService } from '../services/StorageService';
@@ -55,7 +56,9 @@ export class CommandHandler {
       placeHolder: `Branch Tabs - ${branch}`
     });
 
-    if (!selected) {return;}
+    if (!selected) {
+      return;
+    }
 
     switch (selected.detail) {
       case 'save':
@@ -86,13 +89,12 @@ export class CommandHandler {
 
       const workspacePath = this.gitService.getWorkspacePath();
       const tabs = this.tabsService.getCurrentOpenTabs();
-      
       await this.storageService.saveTabs(workspacePath, branch, tabs);
-      
+
       if (this.configService.showNotifications) {
-        vscode.window.showInformationMessage(`✓ Saved ${tabs.length} tabs for ${branch}`);
+        vscode.window.showInformationMessage(`Saved ${tabs.length} tabs for ${branch}`);
       }
-      
+
       Logger.info(`Manually saved ${tabs.length} tabs for ${branch}`);
     } catch (error) {
       Logger.error('Failed to save tabs', error);
@@ -117,11 +119,11 @@ export class CommandHandler {
       }
 
       await this.tabsService.openTabs(savedTabs, false);
-      
+
       if (this.configService.showNotifications) {
-        vscode.window.showInformationMessage(`✓ Restored ${savedTabs.length} tabs`);
+        vscode.window.showInformationMessage(`Restored ${savedTabs.length} tabs`);
       }
-      
+
       Logger.info(`Manually restored ${savedTabs.length} tabs for ${branch}`);
     } catch (error) {
       Logger.error('Failed to restore tabs', error);
@@ -146,8 +148,9 @@ export class CommandHandler {
       }
 
       const items = savedTabs.map((tab, index) => {
-        const fileName = tab.filePath.split(/[/\\]/).pop() || tab.filePath;
-        const relativePath = tab.filePath.replace(workspacePath, '');
+        const fileName = path.basename(tab.filePath);
+        const relativePath = path.relative(workspacePath, tab.filePath) || fileName;
+
         return {
           label: `$(file) ${fileName}`,
           description: relativePath,
@@ -173,15 +176,12 @@ export class CommandHandler {
         return;
       }
 
-      // Obtener ramas recientes
-      const recentBranches = this.gitService.getRecentBranches();
-      
-      // También obtener ramas que tienen tabs guardadas
+      const recentBranches = await this.gitService.getRecentBranches();
       const workspacePath = this.gitService.getWorkspacePath();
       const branchesWithTabs = await this.storageService.getAllBranchesWithTabs(workspacePath);
 
-      // Combinar y deduplicar
-      const allBranches = Array.from(new Set([...recentBranches, ...branchesWithTabs]));
+      const allBranches = Array.from(new Set([...recentBranches, ...branchesWithTabs]))
+        .filter((branch) => branch !== currentBranch);
 
       if (allBranches.length === 0) {
         vscode.window.showInformationMessage('No other branches available');
@@ -203,7 +203,9 @@ export class CommandHandler {
         placeHolder: 'Select branch to load tabs from'
       });
 
-      if (!selected || !selected.detail) {return;}
+      if (!selected || !selected.detail) {
+        return;
+      }
 
       const selectedBranch = selected.detail;
       const tabsToLoad = await this.storageService.getTabs(workspacePath, selectedBranch);
@@ -213,15 +215,14 @@ export class CommandHandler {
         return;
       }
 
-      // Abrir tabs SIN cerrar las actuales (preserveExisting = true)
       await this.tabsService.openTabs(tabsToLoad, true);
-      
+
       if (this.configService.showNotifications) {
         vscode.window.showInformationMessage(
-          `✓ Added ${tabsToLoad.length} tabs from ${selectedBranch}`
+          `Added ${tabsToLoad.length} tabs from ${selectedBranch}`
         );
       }
-      
+
       Logger.info(`Loaded ${tabsToLoad.length} tabs from ${selectedBranch} to ${currentBranch}`);
     } catch (error) {
       Logger.error('Failed to load tabs from branch', error);

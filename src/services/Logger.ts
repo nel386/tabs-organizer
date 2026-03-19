@@ -8,10 +8,11 @@ export enum LogLevel {
 }
 
 export class Logger {
-  private static outputChannel: vscode.OutputChannel;
+  private static outputChannel: vscode.OutputChannel | undefined;
   private static level: LogLevel = LogLevel.INFO;
 
   static initialize(level: LogLevel = LogLevel.INFO): void {
+    this.outputChannel?.dispose();
     this.outputChannel = vscode.window.createOutputChannel('Branch Tabs');
     this.level = level;
   }
@@ -37,21 +38,31 @@ export class Logger {
   static error(message: string, error?: any): void {
     this.log('ERROR', message, error);
     if (error?.stack) {
-      this.outputChannel.appendLine(error.stack);
+      this.outputChannel?.appendLine(error.stack);
     }
   }
 
   private static log(level: string, message: string, ...args: any[]): void {
+    this.ensureOutputChannel();
+
     const timestamp = new Date().toISOString();
     const formattedArgs = args.length > 0 ? ` ${JSON.stringify(args)}` : '';
-    this.outputChannel.appendLine(`[${timestamp}] [${level}] ${message}${formattedArgs}`);
+    this.outputChannel?.appendLine(`[${timestamp}] [${level}] ${message}${formattedArgs}`);
   }
 
   static show(): void {
-    this.outputChannel.show();
+    this.ensureOutputChannel();
+    this.outputChannel?.show();
   }
 
   static dispose(): void {
     this.outputChannel?.dispose();
+    this.outputChannel = undefined;
+  }
+
+  private static ensureOutputChannel(): void {
+    if (!this.outputChannel) {
+      this.outputChannel = vscode.window.createOutputChannel('Branch Tabs');
+    }
   }
 }

@@ -14,62 +14,45 @@ let configService: ConfigService;
 let statusBarManager: StatusBarManager;
 let commandHandler: CommandHandler;
 let autoSaveTimeout: NodeJS.Timeout | undefined;
+let autoSaveTabsDisposable: vscode.Disposable | undefined;
 
 export async function activate(context: vscode.ExtensionContext) {
-  // Inicializar logger
   Logger.initialize(LogLevel.INFO);
   Logger.info('Branch Tabs extension activated');
 
   try {
-    // Inicializar servicios
     gitService = new GitService();
     storageService = new StorageService(context);
     tabsService = new TabsService();
     configService = new ConfigService();
-    
-    // Inicializar Git
+
     const gitInitialized = await gitService.initialize();
     if (!gitInitialized) {
-      Logger.warn('Git extension not available');
+      Logger.warn('Git repository not available in current workspace');
       return;
     }
 
-    // Inicializar UI
     statusBarManager = new StatusBarManager(gitService, storageService);
     commandHandler = new CommandHandler(gitService, storageService, tabsService, configService);
 
-    // Actualizar status bar inicial
     await statusBarManager.update();
-
-    // Registrar comandos
     registerCommands(context);
-
-    // Configurar watcher de cambios de rama
     setupBranchWatcher(context);
+    configureAutoSaveSubscription();
 
-    // Auto-save con debounce
-    if (configService.autoSave) {
-      context.subscriptions.push(
-        vscode.window.tabGroups.onDidChangeTabs(async () => {
-          scheduleAutoSave();
-          await statusBarManager.update();
-        })
-      );
-    }
-
-    // Escuchar cambios de configuración
     context.subscriptions.push(
-      vscode.workspace.onDidChangeConfiguration((e) => {
-        if (e.affectsConfiguration('branchTabs')) {
-          configService.refresh();
-          Logger.info('Configuration updated');
+      vscode.workspace.onDidChangeConfiguration((event) => {
+        if (!event.affectsConfiguration('branchTabs')) {
+          return;
         }
+
+        configService.refresh();
+        configureAutoSaveSubscription();
+        Logger.info('Configuration updated');
       })
     );
 
-    // Agregar status bar a disposables
     context.subscriptions.push(statusBarManager);
-
     Logger.info('Extension activation completed successfully');
   } catch (error) {
     Logger.error('Failed to activate extension', error);
@@ -81,6 +64,8 @@ export function deactivate() {
   if (autoSaveTimeout) {
     clearTimeout(autoSaveTimeout);
   }
+
+  autoSaveTabsDisposable?.dispose();
   Logger.info('Extension deactivated');
   Logger.dispose();
 }
@@ -112,17 +97,14 @@ function registerCommands(context: vscode.ExtensionContext): void {
 function setupBranchWatcher(context: vscode.ExtensionContext): void {
   const disposable = gitService.onBranchChange(async (newBranch, oldBranch) => {
     Logger.info(`Branch changed from ${oldBranch} to ${newBranch}`);
-    
+
     try {
-      // Guardar tabs de la rama anterior
       await saveTabs(oldBranch);
-      
-      // Restaurar tabs de la nueva rama si está habilitado
+
       if (configService.autoRestore) {
         await restoreTabs(newBranch);
       }
-      
-      // Actualizar status bar
+
       await statusBarManager.update();
     } catch (error) {
       Logger.error('Error during branch change', error);
@@ -134,13 +116,20 @@ function setupBranchWatcher(context: vscode.ExtensionContext): void {
 }
 
 function scheduleAutoSave(): void {
+  if (!configService.autoSave) {
+    return;
+  }
+
   if (autoSaveTimeout) {
     clearTimeout(autoSaveTimeout);
   }
 
   const delay = configService.autoSaveDelay;
-  
   autoSaveTimeout = setTimeout(async () => {
+    if (!configService.autoSave) {
+      return;
+    }
+
     const branch = gitService.getCurrentBranch();
     if (branch) {
       await saveTabs(branch);
@@ -148,11 +137,33 @@ function scheduleAutoSave(): void {
   }, delay);
 }
 
+function configureAutoSaveSubscription(): void {
+  autoSaveTabsDisposable?.dispose();
+  autoSaveTabsDisposable = undefined;
+
+  if (!configService.autoSave) {
+    if (autoSaveTimeout) {
+      clearTimeout(autoSaveTimeout);
+      autoSaveTimeout = undefined;
+    }
+
+    Logger.info('Auto-save listener disabled');
+    return;
+  }
+
+  autoSaveTabsDisposable = vscode.window.tabGroups.onDidChangeTabs(async () => {
+    scheduleAutoSave();
+    await statusBarManager.update();
+  });
+
+  Logger.info('Auto-save listener enabled');
+}
+
 async function saveTabs(branchName: string): Promise<void> {
   try {
     const workspacePath = gitService.getWorkspacePath();
     const tabs = tabsService.getCurrentOpenTabs();
-    
+
     await storageService.saveTabs(workspacePath, branchName, tabs);
     Logger.debug(`Saved ${tabs.length} tabs for branch: ${branchName}`);
   } catch (error) {
@@ -174,7 +185,7 @@ async function restoreTabs(branchName: string): Promise<void> {
     }
 
     await tabsService.openTabs(savedTabs, false);
-    
+
     if (configService.showNotifications) {
       vscode.window.showInformationMessage(
         `Restored ${savedTabs.length} tabs for branch: ${branchName}`

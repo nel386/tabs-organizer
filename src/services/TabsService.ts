@@ -1,14 +1,31 @@
 import * as vscode from 'vscode';
+import { Logger } from './Logger';
 import { TabInfo } from '../types';
 
 export class TabsService {
   getCurrentOpenTabs(): TabInfo[] {
+    const uniquePaths = new Set<string>();
+
     return vscode.window.tabGroups.all
       .flatMap(group => group.tabs)
-      .filter(tab => tab.input instanceof vscode.TabInputText)
-      .map(tab => ({
-        filePath: (tab.input as vscode.TabInputText).uri.fsPath
-      }));
+      .filter((tab): tab is vscode.Tab & { input: vscode.TabInputText } => {
+        if (!(tab.input instanceof vscode.TabInputText)) {
+          return false;
+        }
+
+        return tab.input.uri.scheme === 'file';
+      })
+      .map((tab) => tab.input.uri.fsPath)
+      .filter((filePath) => {
+        const normalizedPath = filePath.toLowerCase();
+        if (uniquePaths.has(normalizedPath)) {
+          return false;
+        }
+
+        uniquePaths.add(normalizedPath);
+        return true;
+      })
+      .map((filePath) => ({ filePath }));
   }
 
   async closeAllTabs(): Promise<void> {
@@ -27,8 +44,8 @@ export class TabsService {
           preview: false, 
           preserveFocus: true 
         });
-      } catch (err) {
-        console.error(`Could not open file: ${tab.filePath}`, err);
+      } catch (error) {
+        Logger.warn(`Could not open file: ${tab.filePath}`, error);
       }
     }
   }
