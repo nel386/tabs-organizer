@@ -1,13 +1,15 @@
 import * as vscode from 'vscode';
 import { GitService } from '../services/GitService';
 import { StorageService } from '../services/StorageService';
+import { TabsService } from '../services/TabsService';
 
 export class StatusBarManager {
   private statusBarItem: vscode.StatusBarItem;
 
   constructor(
     private gitService: GitService,
-    private storageService: StorageService
+    private storageService: StorageService,
+    private tabsService: TabsService
   ) {
     this.statusBarItem = vscode.window.createStatusBarItem(
       vscode.StatusBarAlignment.Left,
@@ -26,10 +28,11 @@ export class StatusBarManager {
 
     const workspacePath = this.gitService.getWorkspacePath();
     const savedTabs = await this.storageService.getTabs(workspacePath, branch);
-    const tabCount = savedTabs.length;
+    const savedCount = savedTabs.length;
+    const openCount = this.tabsService.getTabsCount();
 
-    this.statusBarItem.text = `$(file-directory) ${branch} (${tabCount} tabs)`;
-    this.statusBarItem.tooltip = `Branch Tabs: ${branch}\nClick for options`;
+    this.statusBarItem.text = `$(file-directory) ${branch} (${savedCount} saved)`;
+    this.statusBarItem.tooltip = `Branch Tabs: ${branch}\n${openCount} open · ${savedCount} saved\nClick for options`;
     this.statusBarItem.show();
   }
 

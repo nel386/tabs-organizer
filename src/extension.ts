@@ -32,7 +32,7 @@ export async function activate(context: vscode.ExtensionContext) {
       return;
     }
 
-    statusBarManager = new StatusBarManager(gitService, storageService);
+    statusBarManager = new StatusBarManager(gitService, storageService, tabsService);
     commandHandler = new CommandHandler(gitService, storageService, tabsService, configService);
 
     await statusBarManager.update();
@@ -89,6 +89,11 @@ function registerCommands(context: vscode.ExtensionContext): void {
 
     vscode.commands.registerCommand('branchTabs.loadFromBranch', async () => {
       await commandHandler.loadTabsFromBranch();
+      await statusBarManager.update();
+    }),
+
+    vscode.commands.registerCommand('branchTabs.clearWorkspaceData', async () => {
+      await commandHandler.clearWorkspaceData();
       await statusBarManager.update();
     })
   );
@@ -180,7 +185,11 @@ async function restoreTabs(branchName: string): Promise<void> {
     Logger.debug(`Restoring ${savedTabs.length} tabs for branch: ${branchName}`);
 
     if (savedTabs.length === 0) {
-      await tabsService.closeAllTabs();
+      if (configService.showNotifications) {
+        vscode.window.showInformationMessage(
+          `No saved tabs for branch: ${branchName}`
+        );
+      }
       return;
     }
 

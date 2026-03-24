@@ -2,6 +2,19 @@
 
 All notable changes to this extension are documented in this file.
 
+## [0.2.0] - 2026-03-24
+
+### Fixed
+- Lowered minimum VS Code engine requirement from `1.110.0` back to `1.85.0`. The bump in `0.1.0` was unnecessary — the extension only uses APIs available since VS Code 1.64–1.67. This was preventing users on slightly older VS Code versions from receiving the update.
+- Switching to a branch with no saved tabs no longer silently closes all open tabs. It now shows an informational notification and leaves the current tabs untouched.
+
+### Added
+- New command **Branch Tabs: Clear All Saved Data for This Workspace** (`branchTabs.clearWorkspaceData`), also accessible from the quick menu. Useful for resetting corrupted or stale saved state.
+
+### Improved
+- Status bar tooltip now shows both the number of open tabs and saved tabs separately (e.g. `4 open · 2 saved`).
+- Status bar label clarified to say `saved` instead of the ambiguous `tabs`.
+
 ## [0.1.0] - 2026-03-19
 
 ### Changed

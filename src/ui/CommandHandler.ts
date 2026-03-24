@@ -49,6 +49,11 @@ export class CommandHandler {
         label: '$(gear) Settings',
         description: 'Configure Branch Tabs behavior',
         detail: 'settings'
+      },
+      {
+        label: '$(trash) Clear All Saved Data',
+        description: 'Delete all saved tab data for this workspace',
+        detail: 'clear'
       }
     ];
 
@@ -75,6 +80,9 @@ export class CommandHandler {
         break;
       case 'settings':
         await this.openSettings();
+        break;
+      case 'clear':
+        await this.clearWorkspaceData();
         break;
     }
   }
@@ -227,6 +235,30 @@ export class CommandHandler {
     } catch (error) {
       Logger.error('Failed to load tabs from branch', error);
       vscode.window.showErrorMessage('Failed to load tabs from branch');
+    }
+  }
+
+  async clearWorkspaceData(): Promise<void> {
+    try {
+      const workspacePath = this.gitService.getWorkspacePath();
+      const confirmed = await vscode.window.showWarningMessage(
+        'Delete all saved tab data for this workspace? This cannot be undone.',
+        { modal: true },
+        'Delete'
+      );
+
+      if (confirmed !== 'Delete') {
+        return;
+      }
+
+      const count = await this.storageService.clearWorkspaceData(workspacePath);
+      vscode.window.showInformationMessage(
+        `Cleared saved tab data for ${count} branch${count === 1 ? '' : 'es'}`
+      );
+      Logger.info(`Cleared saved tab data for ${count} branches in ${workspacePath}`);
+    } catch (error) {
+      Logger.error('Failed to clear workspace data', error);
+      vscode.window.showErrorMessage('Failed to clear workspace data');
     }
   }
 

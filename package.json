@@ -2,7 +2,7 @@
   "name": "tabs-organizer",
   "displayName": "Branch Tabs Manager",
   "description": "Save and restore opened tabs automatically per Git branch",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "nel386",
   "author": {
     "name": "nel386"
@@ -29,7 +29,7 @@
     "theme": "dark"
   },
   "engines": {
-    "vscode": "^1.110.0"
+    "vscode": "^1.85.0"
   },
   "categories": [
     "Other",
@@ -56,6 +56,10 @@
       {
         "command": "branchTabs.loadFromBranch",
         "title": "Load Tabs from Another Branch..."
+      },
+      {
+        "command": "branchTabs.clearWorkspaceData",
+        "title": "Branch Tabs: Clear All Saved Data for This Workspace"
       }
     ],
     "menus": {
