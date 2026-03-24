@@ -21,9 +21,18 @@ export class StorageService {
   async getAllBranchesWithTabs(workspacePath: string): Promise<string[]> {
     const keys = this.context.workspaceState.keys();
     const prefix = `branchTabs:${workspacePath}#`;
-    
+
     return keys
       .filter(key => key.startsWith(prefix))
       .map(key => key.replace(prefix, ''));
+  }
+
+  async clearWorkspaceData(workspacePath: string): Promise<number> {
+    const branches = await this.getAllBranchesWithTabs(workspacePath);
+    for (const branch of branches) {
+      const key = this.getStorageKey(workspacePath, branch);
+      await this.context.workspaceState.update(key, undefined);
+    }
+    return branches.length;
   }
 }
