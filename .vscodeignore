@@ -13,6 +13,7 @@ dist/**/*.map
 node_modules/**
 .git/**
 .github/**
+.claude/**
 *.vsix
 esbuild.js
 eslint.config.mjs
