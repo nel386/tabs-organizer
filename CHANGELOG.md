@@ -2,6 +2,11 @@
 
 All notable changes to this extension are documented in this file.
 
+## [0.2.1] - 2026-03-25
+
+### Fixed
+- VSIX package was missing `dist/extension.js` causing the extension to silently do nothing after installation.
+
 ## [0.2.0] - 2026-03-24
 
 ### Fixed

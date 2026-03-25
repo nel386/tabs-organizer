@@ -2,7 +2,7 @@
   "name": "tabs-organizer",
   "displayName": "Branch Tabs Manager",
   "description": "Save and restore opened tabs automatically per Git branch",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "nel386",
   "author": {
     "name": "nel386"
