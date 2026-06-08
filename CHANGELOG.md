@@ -2,6 +2,11 @@
 
 All notable changes to this extension are documented in this file.
 
+## [0.3.1] - 2026-06-08
+
+### Changed
+- Updated extension icon.
+
 ## [0.3.0] - 2026-06-08
 
 ### Fixed
