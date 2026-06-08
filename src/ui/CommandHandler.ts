@@ -27,7 +27,7 @@ export class CommandHandler {
     const items: vscode.QuickPickItem[] = [
       {
         label: '$(save) Save Current Tabs',
-        description: `Save ${this.tabsService.getTabsCount()} open tabs for ${branch}`,
+        description: `Save ${this.tabsService.getCurrentUnpinnedOpenTabs().length} unpinned tabs for ${branch}`,
         detail: 'save'
       },
       {
@@ -96,7 +96,7 @@ export class CommandHandler {
       }
 
       const workspacePath = this.gitService.getWorkspacePath();
-      const tabs = this.tabsService.getCurrentOpenTabs();
+      const tabs = this.tabsService.getCurrentUnpinnedOpenTabs();
       await this.storageService.saveTabs(workspacePath, branch, tabs);
 
       if (this.configService.showNotifications) {
@@ -126,10 +126,16 @@ export class CommandHandler {
         return;
       }
 
-      await this.tabsService.openTabs(savedTabs, false);
+      const result = await this.tabsService.openTabs(savedTabs, false);
 
       if (this.configService.showNotifications) {
-        vscode.window.showInformationMessage(`Restored ${savedTabs.length} tabs`);
+        if (result.missing > 0) {
+          vscode.window.showWarningMessage(
+            `Restored ${result.opened} tabs, ${result.missing} file${result.missing === 1 ? '' : 's'} no longer exist`
+          );
+        } else {
+          vscode.window.showInformationMessage(`Restored ${result.opened} tabs`);
+        }
       }
 
       Logger.info(`Manually restored ${savedTabs.length} tabs for ${branch}`);
@@ -223,12 +229,18 @@ export class CommandHandler {
         return;
       }
 
-      await this.tabsService.openTabs(tabsToLoad, true);
+      const loadResult = await this.tabsService.openTabs(tabsToLoad, true);
 
       if (this.configService.showNotifications) {
-        vscode.window.showInformationMessage(
-          `Added ${tabsToLoad.length} tabs from ${selectedBranch}`
-        );
+        if (loadResult.missing > 0) {
+          vscode.window.showWarningMessage(
+            `Added ${loadResult.opened} tabs from ${selectedBranch}, ${loadResult.missing} file${loadResult.missing === 1 ? '' : 's'} missing`
+          );
+        } else {
+          vscode.window.showInformationMessage(
+            `Added ${loadResult.opened} tabs from ${selectedBranch}`
+          );
+        }
       }
 
       Logger.info(`Loaded ${tabsToLoad.length} tabs from ${selectedBranch} to ${currentBranch}`);

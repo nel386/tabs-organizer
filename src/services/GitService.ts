@@ -29,11 +29,12 @@ interface GitExtensionExports {
 }
 
 const BRANCH_REF_TYPE = 0;
-const REPO_DISCOVERY_TIMEOUT_MS = 5000;
+const REPO_DISCOVERY_TIMEOUT_MS = 15000;
 
 export class GitService {
   private gitApi: GitApi | undefined;
   private currentRepository: GitRepository | undefined;
+  private onDidInitializeCallbacks: Array<(gitService: GitService) => void> = [];
 
   async initialize(): Promise<boolean> {
     const gitExtension = vscode.extensions.getExtension<GitExtensionExports>('vscode.git')?.exports;
@@ -46,7 +47,8 @@ export class GitService {
     if (this.gitApi.repositories.length === 0) {
       const discoveredRepository = await this.waitForRepository();
       if (!discoveredRepository) {
-        Logger.warn('No Git repository detected within startup timeout');
+        Logger.warn('No Git repository detected within startup timeout - will retry when a repo opens');
+        this.setupLateInitialization();
         return false;
       }
 
@@ -55,7 +57,40 @@ export class GitService {
       this.currentRepository = this.selectRepository(this.gitApi.repositories);
     }
 
+    if (this.currentRepository) {
+      Logger.info(`Git repository initialized: ${this.currentRepository.rootUri.fsPath}`);
+    }
+
     return Boolean(this.currentRepository);
+  }
+
+  onDidInitialize(callback: (gitService: GitService) => void): void {
+    this.onDidInitializeCallbacks.push(callback);
+  }
+
+  private setupLateInitialization(): void {
+    if (!this.gitApi) {
+      return;
+    }
+
+    const disposable = this.gitApi.onDidOpenRepository((repository) => {
+      if (!this.currentRepository) {
+        this.currentRepository = this.selectRepository(this.gitApi!.repositories) ?? repository;
+        Logger.info(`Late Git initialization: ${this.currentRepository.rootUri.fsPath}`);
+        disposable.dispose();
+        for (const cb of this.onDidInitializeCallbacks) {
+          cb(this);
+        }
+        this.onDidInitializeCallbacks = [];
+      }
+    });
+
+    setTimeout(() => {
+      disposable.dispose();
+      if (this.onDidInitializeCallbacks.length > 0) {
+        Logger.warn('Late Git initialization timed out after extended wait');
+      }
+    }, 60000);
   }
 
   getCurrentBranch(): string | undefined {
@@ -99,12 +134,15 @@ export class GitService {
     return this.currentRepository.state.onDidChange(() => {
       const newBranch = this.getCurrentBranch();
 
-      if (newBranch && previousBranch && newBranch !== previousBranch) {
-        void callback(newBranch, previousBranch);
-        previousBranch = newBranch;
-      } else if (newBranch) {
-        previousBranch = newBranch;
+      if (!newBranch) {
+        return;
       }
+
+      if (previousBranch && newBranch !== previousBranch) {
+        void callback(newBranch, previousBranch);
+      }
+
+      previousBranch = newBranch;
     });
   }
 

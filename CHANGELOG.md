@@ -2,6 +2,32 @@
 
 All notable changes to this extension are documented in this file.
 
+## [0.3.0] - 2026-06-08
+
+### Fixed
+- Extension no longer silently fails to activate when the Git extension initializes slowly. A late-initialization listener now completes setup when a repository is detected after startup.
+- Git repository discovery timeout increased from 5s to 15s to handle larger repos and remote workspaces.
+- Branch change detection no longer fires on unrelated Git state updates (staged files, etc.).
+- Files that no longer exist on disk are skipped during restore instead of causing silent failures, with a warning notification.
+- Tab list now filters to only files within the current workspace folders (no longer saves tabs from unrelated projects).
+- Manual restore and load-from-branch commands now report how many files were opened vs. missing.
+- Commands show a warning when the extension is still initializing instead of silently doing nothing.
+
+### Changed
+- Minimum VS Code engine requirement set to `1.120.0` to match the API surface actually used.
+- Updated `@types/vscode`, `typescript-eslint`, and `esbuild` to their latest compatible versions.
+
+### Removed
+- Unused `BranchTabsState` and `GitRepository` interfaces from `types/index.ts`.
+
+## [0.2.2] - 2026-04-30
+
+### Fixed
+- Branch switch workflow now preserves pinned tabs and closes only unpinned tabs.
+- Auto-save and manual save now persist only unpinned tabs, so pinned tabs stay global and no longer pollute branch snapshots.
+- Switching to a branch with no saved tabs now leaves only pinned tabs open (instead of keeping previous branch unpinned tabs).
+- Cleared pending auto-save timer on branch switch to reduce cross-branch save races.
+
 ## [0.2.1] - 2026-03-25
 
 ### Fixed

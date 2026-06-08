@@ -15,6 +15,7 @@ let statusBarManager: StatusBarManager;
 let commandHandler: CommandHandler;
 let autoSaveTimeout: NodeJS.Timeout | undefined;
 let autoSaveTabsDisposable: vscode.Disposable | undefined;
+let isInitialized = false;
 
 export async function activate(context: vscode.ExtensionContext) {
   Logger.initialize(LogLevel.INFO);
@@ -28,36 +29,50 @@ export async function activate(context: vscode.ExtensionContext) {
 
     const gitInitialized = await gitService.initialize();
     if (!gitInitialized) {
-      Logger.warn('Git repository not available in current workspace');
+      Logger.warn('Git repository not available at startup - setting up late init listener');
+      gitService.onDidInitialize((gs) => {
+        Logger.info('Git repository detected after startup, completing initialization');
+        completeActivation(context);
+      });
+      registerCommands(context);
       return;
     }
 
-    statusBarManager = new StatusBarManager(gitService, storageService, tabsService);
-    commandHandler = new CommandHandler(gitService, storageService, tabsService, configService);
-
-    await statusBarManager.update();
-    registerCommands(context);
-    setupBranchWatcher(context);
-    configureAutoSaveSubscription();
-
-    context.subscriptions.push(
-      vscode.workspace.onDidChangeConfiguration((event) => {
-        if (!event.affectsConfiguration('branchTabs')) {
-          return;
-        }
-
-        configService.refresh();
-        configureAutoSaveSubscription();
-        Logger.info('Configuration updated');
-      })
-    );
-
-    context.subscriptions.push(statusBarManager);
-    Logger.info('Extension activation completed successfully');
+    await completeActivation(context);
   } catch (error) {
     Logger.error('Failed to activate extension', error);
     vscode.window.showErrorMessage('Branch Tabs: Failed to activate extension');
   }
+}
+
+async function completeActivation(context: vscode.ExtensionContext): Promise<void> {
+  if (isInitialized) {
+    return;
+  }
+  isInitialized = true;
+
+  statusBarManager = new StatusBarManager(gitService, storageService, tabsService);
+  commandHandler = new CommandHandler(gitService, storageService, tabsService, configService);
+
+  await statusBarManager.update();
+  registerCommands(context);
+  setupBranchWatcher(context);
+  configureAutoSaveSubscription();
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (!event.affectsConfiguration('branchTabs')) {
+        return;
+      }
+
+      configService.refresh();
+      configureAutoSaveSubscription();
+      Logger.info('Configuration updated');
+    })
+  );
+
+  context.subscriptions.push(statusBarManager);
+  Logger.info('Extension activation completed successfully');
 }
 
 export function deactivate() {
@@ -73,28 +88,48 @@ export function deactivate() {
 function registerCommands(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('branchTabs.saveTabs', async () => {
+      if (!commandHandler) {
+        vscode.window.showWarningMessage('Branch Tabs: Extension is still initializing');
+        return;
+      }
       await commandHandler.saveTabs();
-      await statusBarManager.update();
+      await statusBarManager?.update();
     }),
 
     vscode.commands.registerCommand('branchTabs.restoreTabs', async () => {
+      if (!commandHandler) {
+        vscode.window.showWarningMessage('Branch Tabs: Extension is still initializing');
+        return;
+      }
       await commandHandler.restoreTabs();
-      await statusBarManager.update();
+      await statusBarManager?.update();
     }),
 
     vscode.commands.registerCommand('branchTabs.showQuickMenu', async () => {
+      if (!commandHandler) {
+        vscode.window.showWarningMessage('Branch Tabs: Extension is still initializing');
+        return;
+      }
       await commandHandler.showQuickMenu();
-      await statusBarManager.update();
+      await statusBarManager?.update();
     }),
 
     vscode.commands.registerCommand('branchTabs.loadFromBranch', async () => {
+      if (!commandHandler) {
+        vscode.window.showWarningMessage('Branch Tabs: Extension is still initializing');
+        return;
+      }
       await commandHandler.loadTabsFromBranch();
-      await statusBarManager.update();
+      await statusBarManager?.update();
     }),
 
     vscode.commands.registerCommand('branchTabs.clearWorkspaceData', async () => {
+      if (!commandHandler) {
+        vscode.window.showWarningMessage('Branch Tabs: Extension is still initializing');
+        return;
+      }
       await commandHandler.clearWorkspaceData();
-      await statusBarManager.update();
+      await statusBarManager?.update();
     })
   );
 }
@@ -104,6 +139,11 @@ function setupBranchWatcher(context: vscode.ExtensionContext): void {
     Logger.info(`Branch changed from ${oldBranch} to ${newBranch}`);
 
     try {
+      if (autoSaveTimeout) {
+        clearTimeout(autoSaveTimeout);
+        autoSaveTimeout = undefined;
+      }
+
       await saveTabs(oldBranch);
 
       if (configService.autoRestore) {
@@ -158,7 +198,7 @@ function configureAutoSaveSubscription(): void {
 
   autoSaveTabsDisposable = vscode.window.tabGroups.onDidChangeTabs(async () => {
     scheduleAutoSave();
-    await statusBarManager.update();
+    await statusBarManager?.update();
   });
 
   Logger.info('Auto-save listener enabled');
@@ -167,7 +207,7 @@ function configureAutoSaveSubscription(): void {
 async function saveTabs(branchName: string): Promise<void> {
   try {
     const workspacePath = gitService.getWorkspacePath();
-    const tabs = tabsService.getCurrentOpenTabs();
+    const tabs = tabsService.getCurrentUnpinnedOpenTabs();
 
     await storageService.saveTabs(workspacePath, branchName, tabs);
     Logger.debug(`Saved ${tabs.length} tabs for branch: ${branchName}`);
@@ -183,6 +223,7 @@ async function restoreTabs(branchName: string): Promise<void> {
     const savedTabs = await storageService.getTabs(workspacePath, branchName);
 
     Logger.debug(`Restoring ${savedTabs.length} tabs for branch: ${branchName}`);
+    await tabsService.closeUnpinnedTabs();
 
     if (savedTabs.length === 0) {
       if (configService.showNotifications) {
@@ -193,12 +234,18 @@ async function restoreTabs(branchName: string): Promise<void> {
       return;
     }
 
-    await tabsService.openTabs(savedTabs, false);
+    const result = await tabsService.openTabs(savedTabs, true);
 
     if (configService.showNotifications) {
-      vscode.window.showInformationMessage(
-        `Restored ${savedTabs.length} tabs for branch: ${branchName}`
-      );
+      if (result.missing > 0) {
+        vscode.window.showWarningMessage(
+          `Restored ${result.opened} tabs for branch: ${branchName}, ${result.missing} file${result.missing === 1 ? '' : 's'} missing`
+        );
+      } else {
+        vscode.window.showInformationMessage(
+          `Restored ${result.opened} tabs for branch: ${branchName}`
+        );
+      }
     }
   } catch (error) {
     Logger.error(`Failed to restore tabs for branch ${branchName}`, error);
